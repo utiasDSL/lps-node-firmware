@@ -218,9 +218,10 @@ static void uwbTask(void* parameters)
   while(1) {
     if (xSemaphoreTake(irqSemaphore, timeout/portTICK_PERIOD_MS)) {
       do{
-          dwHandleInterrupt(dwm);
+          dwHandleInterrupt(dwm);     // handle interrupts
       } while(checkIrq() != 0);
     } else {
+      // depend on the selected algorithm, trigger the onEvent function in 1000 hz
       timeout = algorithm->onEvent(dwm, eventTimeout);
     }
   }
