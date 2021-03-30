@@ -95,7 +95,7 @@ static void main_task(void *pvParameters) {
   ledOn(ledMode);
   buttonInit(buttonIdle);
 
-  printf("\r\n\r\n====================\r\n");
+  printf("\r\n\r\n==========Test for CIR Values of Received UWB Signals==========\r\n");
 
   printf("SYSTEM\t: CPU-ID: ");
   for (i=0; i<12; i++) {
