@@ -38,8 +38,10 @@ void lppHandleShortPacket(char *data, size_t length);
 #define LPP_SHORT_UWB 0x04
 #define LPP_SHORT_UWB_MODE 0x05
 
+// Add power values
 struct lppShortAnchorPosition_s {
   float position[3];
+  float signal_power[2];
 } __attribute__((packed));
 
 #define LPP_SHORT_REBOOT_TO_BOOTLOADER 0x00

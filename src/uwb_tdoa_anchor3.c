@@ -110,6 +110,9 @@ The implementation must handle
 // Useful constants
 static const uint8_t base_address[] = {0,0,0,0,0,0,0xcf,0xbc};
 
+static float snr = 0.0f;
+static float power_diff = 0.0f;
+
 // Anchor context
 typedef struct {
   uint8_t id;
@@ -499,6 +502,19 @@ static void handleRxPacket(dwDevice_t *dev)
   int dataLength = dwGetDataLength(dev);
   rxPacket.payload[0] = 0;
   dwGetData(dev, (uint8_t*)&rxPacket, dataLength);
+  
+  // get the POWER values from another anchor (only considering 2 anchors)
+  float RX_POWER = 0.0f;    // received power
+  float FP_POWER = 0.0f;    // first path power
+  FP_POWER = dwGetFirstPathPower(dev);
+  RX_POWER = dwGetReceivePower(dev); 
+  
+  snr =  dwGetReceiveQuality(dev);
+  
+  power_diff = RX_POWER - FP_POWER;
+  printf("snr is %f \r\n", snr);
+  printf("power_diff is %f \r\n", power_diff);
+  //-------------------------------------------//
 
   if (dataLength == 0) {
     return;
@@ -592,7 +608,12 @@ static void setTxData(dwDevice_t *dev)
 
     struct lppShortAnchorPosition_s *pos = (struct lppShortAnchorPosition_s*) &txPacket.payload[rangePacketSize + LPP_PAYLOAD];
     memcpy(pos->position, uwbConfig->position, 3 * sizeof(float));
-
+    /*------ Send the power information--------*/
+    // test with dummy values
+    // float power_info[2] = {150.0240, 2.7880};
+    float power_info[2] = {snr, power_diff};
+    memcpy(pos->signal_power, power_info, 2 * sizeof(float));
+    /*----------------------------------------*/
     lppLength = 2 + sizeof(struct lppShortAnchorPosition_s);
   }
 

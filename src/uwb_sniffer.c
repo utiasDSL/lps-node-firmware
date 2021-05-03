@@ -44,7 +44,6 @@
 #include "task.h"
 #include "lpp.h"
 
-
 //------------------------------- useful constents ----------------------------------- //
 #define REMOTE_TX_MAX_COUNT 8
 #define ID_COUNT 256
@@ -66,7 +65,7 @@
 
 // for computing tof ranging distance
 #define ANTENNA_OFFSET  154.6
-#define LOCODECK_TS_FREQ  499.2e6 * 128
+#define LOCODECK_TS_FREQ  (499.2e6 * 128)
 #define SPEED_OF_LIGHT  299792458.0
 // LPP Packet types and format
 #define LPP_HEADER_SHORT_PACKET 0xF0
@@ -342,7 +341,7 @@ static uint32_t tdoa3SnifferOnEvent(dwDevice_t *dev, uwbEvent_t event){
     const rangePacket3_t* rangePacket = (rangePacket3_t *)rxPacket.payload;
     const void* anchorDataPtr = &rangePacket->remoteAnchorData;
     if(rxPacket.payload[0] == PACKET_TYPE_TDOA3){
-        printf("----------------------Receive TDOA3 msg---------------------\r\n");
+        // printf("----------------------Receive TDOA3 msg---------------------\r\n");
         printf("----------------------start packet---------------------\r\n");
         // if destAddress == 255 ---> broadcast ?
         printf("destAddress in packet data is %d \r\n", *rxPacket.destAddress);
@@ -358,16 +357,15 @@ static uint32_t tdoa3SnifferOnEvent(dwDevice_t *dev, uwbEvent_t event){
             printf("remote ID  # %d is %d \r\n", i, anchorData->id);
             if (remoteAgentInfo.hasDistance) {
                 uint16_t tof = anchorData->distance;
-            //  M_PER_TICK = SPEED_OF_LIGHT / LOCODECK_TS_FREQ
-            //  precompute value
-            double M_PER_TICK = 0.0046917639786157855; 
-            double ranging = tof * M_PER_TICK - ANTENNA_OFFSET;         // save the ranging info
-            remoteAgentInfo.ranging = ranging;
-            anchorDataPtr += sizeof(remoteAnchorDataFull_t);
-            printf("Ranging distance from anchor %d to anchor %d: %lf [m]\r\n", *rxPacket.sourceAddress,anchorData->id,ranging);
-            }else{
-                anchorDataPtr += sizeof(remoteAnchorDataShort_t);
-            }
+                float ranging = tof * SPEED_OF_LIGHT / LOCODECK_TS_FREQ - ANTENNA_OFFSET;         // save the ranging info
+                remoteAgentInfo.ranging = ranging;
+                printf("tof is %d [tick]\r\n",tof);
+                printf("ranging is %f [m] \r\n",ranging);
+                anchorDataPtr += sizeof(remoteAnchorDataFull_t);
+                printf("Ranging distance from anchor %d to anchor %d: %lf [m]\r\n", *rxPacket.sourceAddress,anchorData->id, ranging);
+                }else{
+                    anchorDataPtr += sizeof(remoteAnchorDataShort_t);
+                }
         }
         /*----------------- get access to remote anchor positions---------------------------*/
         // moved from lpsTdoa3Tag.c --> rxcallback
