@@ -86,8 +86,6 @@
 #define PACKET_TYPE_TDOA3 0x30
 // tdoa4 protocol version
 #define PACKET_TYPE_TDOA4 0x60
-// define a packet type for Agent info
-#define LPP_SHORT_AGENT_INFO 0x07
 
 #define PAYLOAD_TYPE 0
 #define TYPE 1
@@ -161,19 +159,8 @@ typedef struct {
 // } ctx;
 // lpp packet
 struct lppShortAnchorPos_s {
-      float x;
-      float y;
-      float z;
-      float q0;
-      float q1;
-      float q2;
-      float q3;
-    float imu0;
-    float imu1;
-    float imu2;
-    float imu3;
-    float imu4;
-    float imu5;
+      float position[3];
+      float signal_power[2];
 } __attribute__((packed));
 // [New] Define a struct containing the info of remote "anchor" --> agent
 // global variable
@@ -290,7 +277,7 @@ static void setupRx(dwDevice_t *dev)
 static void handleLppShortPacket(const uint8_t *data, const int length) {
     // printf("get in handleLppShortPacket \r\n");
   uint8_t type = data[0];
-  if (type == LPP_SHORT_AGENT_INFO) {
+  if (type == LPP_SHORT_ANCHORPOS) {
     struct lppShortAnchorPos_s *pos = (struct lppShortAnchorPos_s*)&data[1];
     // printf("Position data is: (%f,%f,%f) \r\n", pos->x, pos->y, pos->z);
     // printf("Raw data: \r\n");
@@ -300,24 +287,16 @@ static void handleLppShortPacket(const uint8_t *data, const int length) {
     // results --> Raw data: 01 00 00 00 00 cd cc cc 3d cd cc 4c 3e 
     // a float -> 4 bytes. Raw data 13 bytes, the first one is type. 
     // The rest 12 bytes -> float x, y, z
-    remoteAgentInfo.remoteData.x = pos->x;
-    remoteAgentInfo.remoteData.y = pos->y;
-    remoteAgentInfo.remoteData.z = pos->z;
-    remoteAgentInfo.remoteData.q0 = pos->q0;
-    remoteAgentInfo.remoteData.q1 = pos->q1;
-    remoteAgentInfo.remoteData.q2 = pos->q2;
-    remoteAgentInfo.remoteData.q3 = pos->q3;
-    remoteAgentInfo.remoteData.imu0 = pos->imu0;
-    remoteAgentInfo.remoteData.imu1 = pos->imu1;
-    remoteAgentInfo.remoteData.imu2 = pos->imu2;
-    remoteAgentInfo.remoteData.imu3 = pos->imu3;
-    remoteAgentInfo.remoteData.imu4 = pos->imu4;
-    remoteAgentInfo.remoteData.imu5 = pos->imu5;
+    remoteAgentInfo.remoteData.position[0] = pos->position[0];
+    remoteAgentInfo.remoteData.position[1] = pos->position[1];
+    remoteAgentInfo.remoteData.position[2] = pos->position[2];
+    remoteAgentInfo.remoteData.signal_power[0] = pos->signal_power[0];
+    remoteAgentInfo.remoteData.signal_power[1] = pos->signal_power[1];
     }
 }
 
 static void handleLppPacket(const int dataLength, int rangePacketLength, const packet_t* rxPacket) {
-    // printf("get in handleLppPacket \r\n");
+//   printf("get in handleLppPacket \r\n");
   const int32_t payloadLength = dataLength - MAC802154_HEADER_LENGTH;
   const int32_t startOfLppDataInPayload = rangePacketLength;
   const int32_t lppDataLength = payloadLength - startOfLppDataInPayload;
@@ -349,21 +328,56 @@ static uint32_t tdoa3SnifferOnEvent(dwDevice_t *dev, uwbEvent_t event){
     RX_POWER = dwGetReceivePower(dev);
     SNR = dwGetReceiveQuality(dev);
 
-    printf("Received UWB signal \r\n");
-    printf("The first path power is: %f dBm\r\n", FP_POWER);
-    printf("The total received power is: %f dBm\r\n", RX_POWER);
-    printf("The FP Amplitude / CIRE-noiseStd  is: %f \r\n", SNR);
+    // printf("Received UWB signal \r\n");
+    // printf("The first path power is: %f dBm\r\n", FP_POWER);
+    // printf("The total received power is: %f dBm\r\n", RX_POWER);
+    // printf("The FP Amplitude / CIRE-noiseStd  is: %f \r\n", SNR);
 
     setupRx(dev);
     /*----------------- get access to ID and distance---------------------------*/
     // // For anchor code:
     // uint8_t remoteAnchorId = rxPacket.sourceAddress[0]; 
     remoteAgentInfo.remoteAgentID = *rxPacket.sourceAddress & 0xff;            // save the Agent IDs
-
+    printf("Received UWB signal from anchor %d \r\n", remoteAgentInfo.remoteAgentID);
     const rangePacket3_t* rangePacket = (rangePacket3_t *)rxPacket.payload;
     const void* anchorDataPtr = &rangePacket->remoteAnchorData;
     if(rxPacket.payload[0] == PACKET_TYPE_TDOA3){
         printf("----------------------Receive TDOA3 msg---------------------\r\n");
+        printf("----------------------start packet---------------------\r\n");
+        // if destAddress == 255 ---> broadcast ?
+        printf("destAddress in packet data is %d \r\n", *rxPacket.destAddress);
+        printf("sourceAddress in packet data is %d \r\n", *rxPacket.sourceAddress);    
+        // loop over all remote anchor data 
+        for (uint8_t i = 0; i < rangePacket->header.remoteCount; i++) {
+            remoteAnchorDataFull_t* anchorData = (remoteAnchorDataFull_t*)anchorDataPtr;
+            // the anchor ID that receives the radio signal
+            // uint8_t remoteId = anchorData->id;
+            remoteAgentInfo.destAgentID = anchorData->id;
+
+            remoteAgentInfo.hasDistance = ((anchorData->seq & 0x80) != 0);            // save "hasDistance" 
+            printf("remote ID  # %d is %d \r\n", i, anchorData->id);
+            if (remoteAgentInfo.hasDistance) {
+                uint16_t tof = anchorData->distance;
+            //  M_PER_TICK = SPEED_OF_LIGHT / LOCODECK_TS_FREQ
+            //  precompute value
+            double M_PER_TICK = 0.0046917639786157855; 
+            double ranging = tof * M_PER_TICK - ANTENNA_OFFSET;         // save the ranging info
+            remoteAgentInfo.ranging = ranging;
+            anchorDataPtr += sizeof(remoteAnchorDataFull_t);
+            printf("Ranging distance from anchor %d to anchor %d: %lf [m]\r\n", *rxPacket.sourceAddress,anchorData->id,ranging);
+            }else{
+                anchorDataPtr += sizeof(remoteAnchorDataShort_t);
+            }
+        }
+        /*----------------- get access to remote anchor positions---------------------------*/
+        // moved from lpsTdoa3Tag.c --> rxcallback
+        int rangeDataLength = (uint8_t*)anchorDataPtr - (uint8_t*)rangePacket;
+        handleLppPacket(dataLength, rangeDataLength, &rxPacket);
+        // print out
+        printf("The position of the remote anchor %d is: (%f,%f,%f)\r\n",(int) remoteAgentInfo.remoteAgentID, remoteAgentInfo.remoteData.position[0],remoteAgentInfo.remoteData.position[1],remoteAgentInfo.remoteData.position[2]);
+        printf("The power values from the remote anchor %d is: {snr: %f, power-diff: %f}", (int) remoteAgentInfo.remoteAgentID, remoteAgentInfo.remoteData.signal_power[0], remoteAgentInfo.remoteData.signal_power[1]);
+        printf("----------------------------------------------------\r\n");
+        printf("\r\n");
         }
      else{ printf("----------------------Receive unknown msg---------------------\r\n");}
   }
